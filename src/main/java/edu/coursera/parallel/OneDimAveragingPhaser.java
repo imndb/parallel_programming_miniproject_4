@@ -108,8 +108,54 @@ public final class OneDimAveragingPhaser {
      * @param tasks The number of threads/tasks to use to compute the solution
      */
     public static void runParallelFuzzyBarrier(final int iterations,
-            final double[] myNew, final double[] myVal, final int n,
-            final int tasks) {
+                                               final double[] myNew, final double[] myVal, final int n,
+                                               final int tasks) {
+
+        Phaser[] phs = new Phaser[tasks];
+        for (int i = 0; i < phs.length; i++) {
+            phs[i] = new Phaser(1);
+        }
+
+        Thread[] threads = new Thread[tasks];
+
+        for (int j = 0; j < tasks; j++) {
+            final int i = j;
+
+            threads[j] = new Thread(() -> {
+                double[] threadMyVal = myVal;
+                double[] threadMyNew = myNew;
+
+                for (int iteration = 0; iteration < iterations; iteration++) {
+                    final int left = i * (n / tasks) + 1;
+                    final int right = (i + 1) * (n / tasks);
+
+                    for (int j = left; j <= right; j++) {
+                        threadMyNew[j] = (threadMyVal[j - 1]
+                                + threadMyVal[j + 1]) / 2.0;
+                    }
+                    phs[i].arrive();
+                    if (i - 1 >= 0) {
+                        phs[i - 1].awaitAdvance(iteration);
+                    }
+                    if (i + 1 < tasks) {
+                        phs[i + 1].awaitAdvance(iteration);
+                    }
+
+                    double[] tempVal = threadMyNew;
+                    threadMyNew = threadMyVal;
+                    threadMyVal = tempVal;
+                }
+            });
+            threads[j].start();
+        }
+
+        for (int k = 0; k < tasks; k++) {
+            try {
+                threads[k].join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
 
     }
 }
